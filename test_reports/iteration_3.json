@@ -1,0 +1,44 @@
+{
+  "summary": "Full regression of the PROPERLEAD rewrite (Sikumbang → Collector → DB → Deteksi → Lead → Finance → CRM → Rencana). Rewrote the obsolete iteration_1/2 OSS tests into a new pytest suite (55 tests across 15 classes covering auth, dashboard, perumahan + filters/sort/pagination + CSV + map, detail, perubahan, developers, finance calc/get/save/defaults/list, CRM board, followups, review/CRM/aktivitas flow, plans today/add/optimize/ics/list, public /go redirects (maps + calendar TEMPLATE + route), cron auth incl. duplicate X-Webhook-Id, notifications read/read-all, users RBAC, settings PUT with mkt forbidden, wilayah, sync status, reports summary). 55/55 PASS. Avoided real-email endpoints and full sync as instructed. Frontend: logged in as admin, visited all 10 app pages, every page renders with the expected data-testids (dashboard stat-* cards, filter-*, plan-stop-*, crm-col-*, target-*, map-*, etc.). Dashboard shows total=1693, target=1249. /rencana?add={id} flow correctly adds the perumahan to today's plan (3 stops as expected from prior state). Mobile 390px: no horizontal overflow on dashboard, perumahan, rencana, crm, finance. One real bug found: ?next=/rencana login redirect sends user to '/' instead of '/rencana'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Login (/pages/Login.js)", "issue": "After successful login with /login?next=/rencana user lands on '/' instead of '/rencana'. Root cause: `const nextRaw = new URLSearchParams(window.location.search).get('next') || '/';` is recomputed every render. The submit handler calls navigate(next) with /rencana, but React also runs the useEffect [user,navigate,next]. By the time useEffect fires the URL is already /rencana (no `next=` qs) so nextRaw recomputes to '/', and navigate('/',{replace:true}) overrides. Fix: capture next once via `useState` initializer or `useMemo` keyed on mount (useMemo(()=>…, [])). Also safe to drop the useEffect-based redirect because the submit path already navigates, keeping just a one-shot check when user is pre-authenticated at mount.", "selector": "[data-testid=\"login-submit\"]", "priority": "HIGH"},
+      {"component": "RencanaPage.js line 272 (durasi dropdown)", "issue": "Hydration error 'In HTML, <span> cannot be a child of <option>'. Build-time instrumentation wraps the {m} value in a <span>, which React/Chrome reject inside <option>. Rendering still works but logs an error every page load. Workaround: render the numeric minutes outside a JSX expression (e.g. `{`${m} menit`}` as a plain template string or using the array mapper differently) so the toolchain does not inject the span.", "selector": "select[in RencanaPage] > option", "priority": "LOW"},
+      {"component": "Dashboard / Settings target chips", "issue": "React warning: `Received `true` for a non-boolean attribute `target`` — somewhere `target={true}` is being spread onto a native element (probably a span/button). Should be `data-target` or stringified. Non-blocking.", "selector": "(unknown — searchable via grep for target=\\{)", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "FIX Login redirect race (HIGH): capture next once (useMemo/useState init) in /app/frontend/src/pages/Login.js so the useEffect-driven navigate does not overwrite the submit-handler navigate when the URL changes to the target route.",
+    "FIX hydration <span> in <option> in RencanaPage.js:272 — adjust the duration option JSX so instrumentation can't inject a span inside <option>.",
+    "FIX non-boolean `target` prop warning: grep /app/frontend/src for `target={` passed to a DOM element and either stringify, rename to data-*, or hide via `target ? ...` conditional."
+  ],
+  "critical_code_review_comments": [
+    "Server.py (1093 lines) is approaching the 700-line split threshold — consider carving perumahan/plans/finance/reports into submodules.",
+    "Dashboard endpoint runs 10+ Mongo aggregates per request; cache by (user_id, minute) if dashboard traffic grows.",
+    "Cron idempotency uses `cron_runs` unique index on run_id — good. But `_cron_accept` eagerly reads body JSON; large bodies with wrong content-type could 400 — current coverage OK.",
+    "Login.js next-redirect race (see UI bugs) is the only functional defect found.",
+    "Backend correctly excludes Mongo `_id` across all list/detail projections.",
+    "/api/go/* public endpoints correctly 404 on unknown IDs — verified.",
+    "/api/sync/run with mode=full is super_admin-only — verified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (full rewrite for Sikumbang data model + plans + go/* + cron + RBAC; added sample_pid & plan_date_id session fixtures to be xdist-safe)"
+  ],
+  "success_rate": {"backend": "100% (55/55)", "frontend": "95% — all pages & flows OK except ?next= redirect on Login"},
+  "test_credentials": "Super Admin: selviyuniastuti6@gmail.com / Properlead2026! ; Marketing: marketing@properlead.id / Marketing2026!",
+  "seed_data_creation": "TEST_user_* created & deleted by TestUsers.test_crud; TEST aktivitas 'TEST call' persisted on the top-ranked perumahan via TestReviewCRM; today's admin plan gained the sample perumahan via TestPlans.test_add_perumahan_to_plan. No real emails were sent — digest/run, plans/email, perumahan/email-me, and full sync were all intentionally skipped.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend suite /app/backend/tests/backend_test.py is now the current regression baseline (55 tests, pytest -n 2 loadscope). It uses session-scoped fixtures `admin`, `mkt`, `sample_pid`, `plan_date_id` so each worker-class is self-contained. Do NOT call /api/digest/run, /api/plans/{date}/email, /api/perumahan/{id}/email-me, or /api/sync/run mode=full (real email + external load). Prior state: 3-stop plan for today exists for admin; MTP0520362026T006 (NEW_LISTING) + BJB0210062026T004 (DATA_UPDATED) exist. After the main agent fixes Login.js, retest ?next=/rencana redirect only.",
+  "rca of the issue": "Login redirect: the next query param is derived from window.location.search inside render. On successful submit the component calls navigate(next); React also schedules a user-change useEffect that will call navigate(next). The submit-driven navigation completes first → URL becomes /rencana (no ?next). The useEffect re-renders Login (still mounted for one tick before Protected unmounts it), nextRaw now resolves to '/' because the search string is empty, and the useEffect calls navigate('/'), overriding the earlier redirect. Fix: freeze next at mount — e.g. `const [next] = useState(() => { const r = new URLSearchParams(window.location.search).get('next') || '/'; return r.startsWith('/') && !r.startsWith('//') ? r : '/'; });`."
+}

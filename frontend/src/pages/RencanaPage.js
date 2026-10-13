@@ -269,7 +269,7 @@ export default function RencanaPage() {
                 <div className="grid sm:grid-cols-12 gap-2 mt-3">
                   <Input type="time" value={s.waktu || ""} onChange={(e) => edit(i, { waktu: e.target.value })} className="sm:col-span-2" data-testid={`stop-time-${i}`} />
                   <select value={s.durasi_menit} onChange={(e) => edit(i, { durasi_menit: +e.target.value })} className="sm:col-span-2 h-9 rounded-md border border-input bg-transparent px-2 text-sm">
-                    {[30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>{m} menit</option>)}
+                    {[30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>{`${m} menit`}</option>)}
                   </select>
                   <Input placeholder="Catatan / tujuan kunjungan" value={s.catatan || ""} onChange={(e) => edit(i, { catatan: e.target.value })} className="sm:col-span-8" data-testid={`stop-note-${i}`} />
                 </div>

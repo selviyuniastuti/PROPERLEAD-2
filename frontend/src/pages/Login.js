@@ -11,8 +11,10 @@ import { toast } from "sonner";
 export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
-  const nextRaw = new URLSearchParams(window.location.search).get("next") || "/";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
+  const [next] = useState(() => {
+    const r = new URLSearchParams(window.location.search).get("next") || "/";
+    return r.startsWith("/") && !r.startsWith("//") ? r : "/";
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);

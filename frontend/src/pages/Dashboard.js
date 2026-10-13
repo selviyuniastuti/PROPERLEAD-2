@@ -125,7 +125,8 @@ export default function Dashboard() {
   const open = (id) => navigate(`/perumahan/${encodeURIComponent(id)}`);
 
   if (!d) return <div className="text-slate-400">Memuat dashboard…</div>;
-  const kabData = d.per_kabupaten.map((k) => ({ ...k, short: titleCase(k.nama).replace("Kab. ", "").replace("Kota ", "") }));
+  const targetSet = new Set(d.per_kabupaten.filter((k) => k.target).map((k) => k.kode));
+  const kabData = d.per_kabupaten.map((k) => ({ kode: k.kode, jumlah: k.jumlah, short: titleCase(k.nama).replace("Kab. ", "").replace("Kota ", "") }));
   const totalPrio = Object.values(d.prioritas).reduce((a, b) => a + b, 0) || 1;
   const last = d.last_sync;
 
@@ -235,7 +236,7 @@ export default function Dashboard() {
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v, n) => [v.toLocaleString("id-ID"), n === "jumlah" ? "Perumahan" : n]} />
                 <Bar dataKey="jumlah" radius={[6, 6, 0, 0]}>
-                  {kabData.map((k) => <Cell key={k.kode} fill={k.target ? "#065F46" : "#CBD5E1"} />)}
+                  {kabData.map((k) => <Cell key={k.kode} fill={targetSet.has(k.kode) ? "#065F46" : "#CBD5E1"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
