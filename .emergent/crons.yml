@@ -1,14 +1,23 @@
 crons:
-  - name: oss-auto-sync
-    description: "Simulasi ingest OSS: deteksi lead perumahan baru setiap 30 menit"
+  - name: sikumbang-sync
+    description: "Ambil listing terbaru Sikumbang Kalsel tiap 30 menit, deteksi listing baru & kirim notifikasi"
     cron: "*/30 * * * *"
-    endpoint: "{{BASE_URL}}/api/cron/oss-ingest"
+    endpoint: "{{BASE_URL}}/api/cron/sikumbang-sync"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
+  - name: sikumbang-full
+    description: "Full scan harian Sikumbang Kalsel 03:00 WITA untuk deteksi perubahan harga/unit/listing"
+    cron: "0 3 * * *"
+    timezone: "Asia/Makassar"
+    endpoint: "{{BASE_URL}}/api/cron/sikumbang-full"
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
     enabled: true
   - name: daily-digest
-    description: "Kirim ringkasan harian lead baru & KKPR terbit ke email/Telegram tiap 07:30 WITA"
-    cron: "30 0 * * *"
+    description: "Kirim ringkasan harian listing baru, perubahan & rencana kunjungan tiap 07:30 WITA"
+    cron: "30 7 * * *"
+    timezone: "Asia/Makassar"
     endpoint: "{{BASE_URL}}/api/cron/daily-digest"
     method: POST
     # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.

@@ -11,13 +11,15 @@ import { toast } from "sonner";
 export default function Login() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const nextRaw = new URLSearchParams(window.location.search).get("next") || "/";
+  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (user) navigate("/");
-  }, [user, navigate]);
+    if (user) navigate(next, { replace: true });
+  }, [user, navigate, next]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -26,7 +28,7 @@ export default function Login() {
     setLoading(false);
     if (res.ok) {
       toast.success("Berhasil masuk");
-      navigate("/");
+      navigate(next, { replace: true });
     } else {
       toast.error(res.error);
     }
@@ -51,13 +53,14 @@ export default function Login() {
             Mesin Akuisisi Lead Perumahan untuk Marketing Bank
           </h1>
           <p className="text-slate-300 mt-4 text-sm leading-relaxed">
-            Deteksi milestone tata ruang &amp; perizinan (RDTR, KKPR/PKKPR) dari OSS, ubah menjadi
-            lead terskor, dan kelola follow-up hingga kerjasama dalam satu CRM.
+            Pantau listing perumahan Kalimantan Selatan dari Sikumbang, deteksi listing baru &amp;
+            perubahan data, simulasikan project finance, lalu rencanakan kunjungan dan follow-up
+            developer dalam satu CRM.
           </p>
           <div className="flex gap-6 mt-8">
             <div>
-              <p className="text-2xl font-extrabold text-[#10B981]">KKPR</p>
-              <p className="text-xs text-slate-400">Milestone utama</p>
+              <p className="text-2xl font-extrabold text-[#10B981]">Sikumbang</p>
+              <p className="text-xs text-slate-400">Sumber data</p>
             </div>
             <div>
               <p className="text-2xl font-extrabold text-[#F5C451]">A/B/C</p>

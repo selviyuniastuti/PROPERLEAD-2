@@ -4,7 +4,7 @@ import { Bell } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
-import { ALERT_META, fmtDate } from "@/lib/meta";
+import { DETEKSI_META, fmtDateTime } from "@/lib/meta";
 
 export default function NotificationBell({ data, reload }) {
   const [open, setOpen] = useState(false);
@@ -21,7 +21,7 @@ export default function NotificationBell({ data, reload }) {
     await api.put(`/notifications/${n.id}/read`);
     setOpen(false);
     reload();
-    navigate(`/leads?open=${n.lead_id}`);
+    if (n.perumahan_id) navigate(`/perumahan/${encodeURIComponent(n.perumahan_id)}`);
   };
 
   return (
@@ -44,7 +44,7 @@ export default function NotificationBell({ data, reload }) {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[360px] p-0" data-testid="notification-drawer">
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <p className="font-semibold text-slate-900">Notifikasi & Alert</p>
+          <p className="font-semibold text-slate-900">Notifikasi Sikumbang</p>
           <Button
             variant="ghost"
             size="sm"
@@ -60,7 +60,7 @@ export default function NotificationBell({ data, reload }) {
             <p className="p-6 text-center text-sm text-slate-400">Belum ada notifikasi</p>
           )}
           {items.map((n) => {
-            const meta = ALERT_META[n.alert_type] || ALERT_META.kkpr_terbit;
+            const meta = DETEKSI_META[n.kind] || DETEKSI_META.NEW_LISTING;
             return (
               <button
                 key={n.id}
@@ -74,7 +74,7 @@ export default function NotificationBell({ data, reload }) {
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-900 truncate">{n.judul}</p>
                   <p className="text-xs text-slate-500 truncate">{n.pesan}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{fmtDate(n.created_at)}</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">{fmtDateTime(n.created_at)}</p>
                 </div>
               </button>
             );

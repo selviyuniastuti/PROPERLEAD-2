@@ -1,142 +1,99 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import api, { apiErr } from "@/lib/api";
-import { ALERT_META, PRIORITY_META, CRM_STAGES } from "@/lib/meta";
-import LeadDetailDialog from "@/components/LeadDetailDialog";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { AlarmClock } from "lucide-react";
 import { toast } from "sonner";
+import api, { apiErr } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import { PriorityBadge } from "@/components/Badges";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CRM_STAGES, fmtDate, titleCase } from "@/lib/meta";
 
 export default function CRMBoard() {
-  const [leads, setLeads] = useState([]);
-  const [active, setActive] = useState(null);
+  const [board, setBoard] = useState(null);
+  const [fu, setFu] = useState([]);
+  const navigate = useNavigate();
 
-  const load = async () => {
-    const { data } = await api.get("/leads");
-    setLeads(data);
-  };
+  const load = useCallback(async () => {
+    try {
+      const [b, f] = await Promise.all([api.get("/crm/board"), api.get("/followups")]);
+      setBoard(b.data);
+      setFu(f.data);
+    } catch (e) {
+      toast.error(apiErr(e));
+    }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
-  const move = async (lead, dir) => {
-    const idx = CRM_STAGES.findIndex((s) => s.key === lead.crm_status);
-    const next = idx + dir;
-    if (next < 0 || next >= CRM_STAGES.length) return;
-    const target = CRM_STAGES[next].key;
-    setLeads((ls) => ls.map((l) => (l.id === lead.id ? { ...l, crm_status: target } : l)));
+  const move = async (id, stage) => {
     try {
-      await api.put(`/leads/${lead.id}/crm`, { crm_status: target });
+      await api.put(`/perumahan/${encodeURIComponent(id)}/crm`, { crm_status: stage });
+      toast.success("Tahap CRM diperbarui");
+      load();
     } catch (e) {
       toast.error(apiErr(e));
-      load();
     }
   };
 
-  const openLead = async (id) => {
-    const { data } = await api.get(`/leads/${id}`);
-    setActive(data);
-  };
+  if (!board) return <p className="text-slate-400">Memuat…</p>;
+  const due = fu.filter((x) => x.status !== "mendatang");
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-          Pipeline CRM
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Kelola lead dari NEW hingga Kerjasama. Gunakan panah untuk memindahkan tahap.
-        </p>
-      </div>
+    <div className="fade-up" data-testid="crm-page">
+      <PageHeader title="CRM & Follow-up" subtitle="Kontak, komunikasi, meeting, proposal, hingga kerja sama dengan developer" />
+
+      {due.length > 0 && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 mb-6" data-testid="followup-due">
+          <p className="font-bold text-red-800 flex items-center gap-2 mb-2"><AlarmClock className="h-4 w-4" /> Follow-up jatuh tempo ({due.length})</p>
+          <div className="flex flex-wrap gap-2">
+            {due.map((x) => (
+              <button key={x.id} onClick={() => navigate(`/perumahan/${encodeURIComponent(x.id)}?tab=crm`)} className="rounded-lg bg-white border border-red-200 px-3 py-1.5 text-xs text-left hover:shadow">
+                <span className="font-semibold text-slate-900">{x.nama}</span>
+                <span className={`ml-2 ${x.status === "terlambat" ? "text-red-600" : "text-amber-700"}`}>{x.status === "terlambat" ? "Terlambat" : "Hari ini"} · {fmtDate(x.next_followup)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-4 overflow-x-auto pb-4 brand-scroll">
-        {CRM_STAGES.map((stage, sIdx) => {
-          const col = leads.filter((l) => l.crm_status === stage.key);
+        {CRM_STAGES.map((s) => {
+          const items = board.columns[s.key] || [];
           return (
-            <div
-              key={stage.key}
-              data-testid={`crm-column-${stage.key}`}
-              className="w-72 shrink-0"
-            >
-              <div className="flex items-center justify-between mb-3 px-1">
-                <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: stage.color }} />
-                  <span className="font-semibold text-slate-800 text-sm">{stage.label}</span>
-                </div>
-                <span className="text-xs font-mono font-bold text-slate-400">{col.length}</span>
+            <div key={s.key} className="w-72 shrink-0 rounded-2xl bg-slate-100/70 p-3" data-testid={`crm-col-${s.key}`}>
+              <div className="flex items-center justify-between px-1 mb-3">
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} /> {s.label}
+                </span>
+                <span className="text-xs font-bold text-slate-500">{items.length}</span>
               </div>
-              <div className="space-y-3 min-h-[100px]">
-                {col.map((l) => {
-                  const alert = ALERT_META[l.alert_type] || ALERT_META.kkpr_terbit;
-                  const prio = PRIORITY_META[l.prioritas];
-                  return (
-                    <div
-                      key={l.id}
-                      data-testid={`crm-card-${l.id}`}
-                      className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${prio.badge}`}>
-                          {prio.label} · {l.score}
-                        </span>
+              <div className="space-y-2">
+                {items.length === 0 && <p className="text-xs text-slate-400 px-1">Kosong</p>}
+                {items.map((it) => (
+                  <div key={it.id} className="rounded-xl bg-white border border-slate-200 p-3 shadow-sm" data-testid={`crm-card-${it.id}`}>
+                    <button onClick={() => navigate(`/perumahan/${encodeURIComponent(it.id)}?tab=crm`)} className="text-left w-full">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-slate-900 leading-snug">{it.nama}</p>
+                        <PriorityBadge value={it.prioritas} />
                       </div>
-                      <button
-                        onClick={() => openLead(l.id)}
-                        className="text-left w-full"
-                        data-testid={`crm-open-${l.id}`}
-                      >
-                        <p className="font-semibold text-slate-900 text-sm leading-tight">
-                          {l.developer?.nama}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-0.5">{l.proyek?.nama}</p>
-                        <p className="text-xs text-slate-400 mt-1">{l.proyek?.kabupaten_kota}</p>
-                      </button>
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
-                        <span className={`h-1.5 w-1.5 rounded-full ${alert.dot}`} />
-                        <div className="flex gap-1">
-                          <button
-                            disabled={sIdx === 0}
-                            onClick={() => move(l, -1)}
-                            data-testid={`crm-prev-${l.id}`}
-                            className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
-                          >
-                            <ChevronLeft className="h-4 w-4 text-slate-500" />
-                          </button>
-                          <button
-                            disabled={sIdx === CRM_STAGES.length - 1}
-                            onClick={() => move(l, 1)}
-                            data-testid={`crm-next-${l.id}`}
-                            className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"
-                          >
-                            <ChevronRight className="h-4 w-4 text-slate-500" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                {col.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-300">
-                    Kosong
+                      <p className="text-[11px] text-slate-500 mt-0.5">{it.pengembang?.nama}</p>
+                      <p className="text-[11px] text-slate-400">{titleCase(it.wilayah?.kabupaten)} · {it.jumlah_unit} unit</p>
+                      {it.next_followup && <p className="text-[11px] text-amber-700 mt-1">Follow-up {fmtDate(it.next_followup)}</p>}
+                    </button>
+                    <Select value={it.crm_status} onValueChange={(v) => move(it.id, v)}>
+                      <SelectTrigger className="h-7 mt-2 text-xs" data-testid={`crm-move-${it.id}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>{CRM_STAGES.map((x) => <SelectItem key={x.key} value={x.key}>{x.label}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           );
         })}
       </div>
-
-      <LeadDetailDialog
-        lead={active}
-        open={!!active}
-        onOpenChange={(v) => !v && setActive(null)}
-        onChanged={async () => {
-          await load();
-          if (active) {
-            const { data } = await api.get(`/leads/${active.id}`);
-            setActive(data);
-          }
-        }}
-      />
+      <p className="text-xs text-slate-400 mt-2">Lead masuk CRM setelah direview “Layak Dihubungi” atau tahapnya diatur di halaman detail perumahan.</p>
     </div>
   );
 }

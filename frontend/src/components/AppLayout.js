@@ -3,14 +3,17 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   KanbanSquare,
-  ListChecks,
+  Home,
   Bell,
   Users,
   Settings,
   LogOut,
   Menu,
-  X,
   MapPinned,
+  Building2,
+  Calculator,
+  Route,
+  FileBarChart,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Wordmark, BrandMark } from "@/components/Brand";
@@ -22,15 +25,19 @@ import {
 import api from "@/lib/api";
 
 const NAV = [
-  { to: "/", label: "Ringkasan", icon: LayoutDashboard, testid: "nav-dashboard" },
-  { to: "/leads", label: "Daftar Lead", icon: ListChecks, testid: "nav-leads" },
-  { to: "/crm", label: "Pipeline CRM", icon: KanbanSquare, testid: "nav-crm" },
-  { to: "/peta", label: "Peta Proyek", icon: MapPinned, testid: "nav-peta" },
-  { to: "/notifikasi", label: "Notifikasi & Alert", icon: Bell, testid: "nav-notifikasi" },
+  { to: "/", label: "Dashboard Lead", icon: LayoutDashboard, testid: "nav-dashboard" },
+  { to: "/perumahan", label: "Daftar Perumahan", icon: Home, testid: "nav-perumahan" },
+  { to: "/developer", label: "Profil Developer", icon: Building2, testid: "nav-developer" },
+  { to: "/rencana", label: "Rencana Kunjungan", icon: Route, testid: "nav-rencana" },
+  { to: "/crm", label: "CRM & Follow-up", icon: KanbanSquare, testid: "nav-crm" },
+  { to: "/finance", label: "Project Finance", icon: Calculator, testid: "nav-finance" },
+  { to: "/peta", label: "Peta Perumahan", icon: MapPinned, testid: "nav-peta" },
+  { to: "/laporan", label: "Laporan", icon: FileBarChart, testid: "nav-laporan" },
+  { to: "/notifikasi", label: "Notifikasi", icon: Bell, testid: "nav-notifikasi" },
 ];
 const ADMIN_NAV = [
   { to: "/users", label: "Manajemen User", icon: Users, testid: "nav-users" },
-  { to: "/settings", label: "Pengaturan Wilayah", icon: Settings, testid: "nav-settings" },
+  { to: "/settings", label: "Wilayah & Collector", icon: Settings, testid: "nav-settings" },
 ];
 
 export default function AppLayout() {
@@ -65,7 +72,7 @@ export default function AppLayout() {
     .toUpperCase();
 
   const NavItems = ({ onClick }) => (
-    <nav className="flex-1 px-3 space-y-1">
+    <nav className="flex-1 px-3 space-y-1 overflow-y-auto brand-scroll">
       {NAV.map((n) => (
         <NavLink
           key={n.to}

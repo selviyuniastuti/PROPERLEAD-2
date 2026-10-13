@@ -1,77 +1,47 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Pencil, ShieldCheck, UserCheck } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import api, { apiErr } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { toast } from "sonner";
-import { fmtDate } from "@/lib/meta";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { titleCase } from "@/lib/meta";
 
-const EMPTY = { name: "", email: "", password: "", role: "user" };
+const EMPTY = { name: "", email: "", password: "", role: "user", regions: [], email_alert: true, active: true };
 
 export default function UsersPage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(EMPTY);
+  const [wil, setWil] = useState([]);
+  const [form, setForm] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    const { data } = await api.get("/users");
-    setUsers(data);
-  };
-
+  const load = () => api.get("/users").then(({ data }) => setUsers(data)).catch((e) => toast.error(apiErr(e)));
   useEffect(() => {
     load();
+    api.get("/wilayah").then(({ data }) => setWil(data));
   }, []);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm(EMPTY);
-    setOpen(true);
-  };
+  const kabName = (k) => titleCase(wil.find((w) => w.kode === k)?.nama || k);
 
-  const openEdit = (u) => {
-    setEditing(u);
-    setForm({ name: u.name, email: u.email, password: "", role: u.role });
-    setOpen(true);
-  };
-
-  const submit = async () => {
+  const save = async () => {
     setSaving(true);
     try {
-      if (editing) {
-        const payload = { name: form.name, role: form.role };
-        if (form.password) payload.password = form.password;
-        await api.put(`/users/${editing.id}`, payload);
-        toast.success("User diperbarui");
+      if (form.id) {
+        const body = { name: form.name, role: form.role, regions: form.regions, email_alert: form.email_alert, active: form.active };
+        if (form.password) body.password = form.password;
+        await api.put(`/users/${form.id}`, body);
       } else {
-        if (!form.email || !form.password || !form.name) {
-          toast.error("Nama, email, dan password wajib diisi");
-          setSaving(false);
-          return;
-        }
-        await api.post("/users", form);
-        toast.success("User ditambahkan");
+        await api.post("/users", { name: form.name, email: form.email, password: form.password, role: form.role, regions: form.regions, email_alert: form.email_alert });
       }
-      setOpen(false);
+      toast.success("User disimpan");
+      setForm(null);
       load();
     } catch (e) {
       toast.error(apiErr(e));
@@ -80,17 +50,8 @@ export default function UsersPage() {
     }
   };
 
-  const toggleActive = async (u) => {
-    try {
-      await api.put(`/users/${u.id}`, { active: !u.active });
-      load();
-    } catch (e) {
-      toast.error(apiErr(e));
-    }
-  };
-
-  const remove = async (u) => {
-    if (!window.confirm(`Hapus user ${u.name}?`)) return;
+  const del = async (u) => {
+    if (!window.confirm(`Hapus user ${u.email}?`)) return;
     try {
       await api.delete(`/users/${u.id}`);
       toast.success("User dihapus");
@@ -100,123 +61,76 @@ export default function UsersPage() {
     }
   };
 
+  const toggleRegion = (k) =>
+    setForm((f) => ({ ...f, regions: f.regions.includes(k) ? f.regions.filter((x) => x !== k) : [...f.regions, k] }));
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-            Manajemen User
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">Kelola akses Super Admin &amp; marketing bank</p>
-        </div>
-        <Button onClick={openCreate} className="bg-[#065F46] hover:bg-[#044E38]" data-testid="add-user-btn">
-          <Plus className="h-4 w-4 mr-2" /> Tambah User
-        </Button>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto brand-scroll">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
-                <th className="px-5 py-3">Nama</th>
-                <th className="px-3 py-3">Email</th>
-                <th className="px-3 py-3">Peran</th>
-                <th className="px-3 py-3">Aktif</th>
-                <th className="px-3 py-3 hidden md:table-cell">Dibuat</th>
-                <th className="px-3 py-3"></th>
+    <div className="fade-up" data-testid="users-page">
+      <PageHeader title="Manajemen User" subtitle="Atur akses, wilayah notifikasi, dan notifikasi Gmail tiap marketing">
+        <Button onClick={() => setForm({ ...EMPTY })} className="bg-[#065F46] hover:bg-[#064E3B]" data-testid="add-user-btn"><Plus className="h-4 w-4 mr-2" /> Tambah User</Button>
+      </PageHeader>
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
+        <table className="w-full text-sm" data-testid="users-table">
+          <thead className="bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500">
+            <tr>
+              <th className="text-left px-4 py-3">User</th><th className="text-left px-3 py-3">Peran</th>
+              <th className="text-left px-3 py-3">Wilayah notifikasi</th><th className="text-left px-3 py-3">Gmail</th>
+              <th className="text-left px-3 py-3">Status</th><th />
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} className="border-t">
+                <td className="px-4 py-3"><p className="font-semibold">{u.name}</p><p className="text-xs text-slate-500">{u.email}</p></td>
+                <td className="px-3 py-3">{u.role === "super_admin" ? "Super Admin" : "Marketing"}</td>
+                <td className="px-3 py-3 text-xs text-slate-600 max-w-[280px]">{u.regions?.length ? u.regions.map(kabName).join(", ") : "Mengikuti wilayah target"}</td>
+                <td className="px-3 py-3 text-xs">{u.email_alert ? <span className="text-[#065F46] font-semibold">Aktif</span> : <span className="text-slate-400">Nonaktif</span>}</td>
+                <td className="px-3 py-3 text-xs">{u.active ? "Aktif" : <span className="text-red-600">Nonaktif</span>}</td>
+                <td className="px-3 py-3">
+                  <div className="flex gap-1 justify-end">
+                    <Button size="sm" variant="ghost" onClick={() => setForm({ ...EMPTY, ...u, password: "" })} data-testid={`edit-user-${u.email}`}><Pencil className="h-4 w-4" /></Button>
+                    {u.id !== me?.id && <Button size="sm" variant="ghost" className="text-red-500" onClick={() => del(u)}><Trash2 className="h-4 w-4" /></Button>}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50" data-testid={`user-row-${u.id}`}>
-                  <td className="px-5 py-3 font-semibold text-slate-900">{u.name}</td>
-                  <td className="px-3 py-3 text-slate-600">{u.email}</td>
-                  <td className="px-3 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
-                        u.role === "super_admin"
-                          ? "bg-[#FEF3C7] text-[#92400E] border-[#FDE68A]"
-                          : "bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]"
-                      }`}
-                    >
-                      {u.role === "super_admin" ? <ShieldCheck className="h-3 w-3" /> : <UserCheck className="h-3 w-3" />}
-                      {u.role === "super_admin" ? "Super Admin" : "Marketing"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <Switch
-                      checked={u.active}
-                      onCheckedChange={() => toggleActive(u)}
-                      disabled={u.id === me?.id}
-                      data-testid={`user-active-${u.id}`}
-                    />
-                  </td>
-                  <td className="px-3 py-3 text-slate-500 hidden md:table-cell">{fmtDate(u.created_at)}</td>
-                  <td className="px-3 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(u)} data-testid={`edit-user-${u.id}`}>
-                        <Pencil className="h-4 w-4 text-slate-500" />
-                      </Button>
-                      {u.id !== me?.id && (
-                        <Button size="icon" variant="ghost" onClick={() => remove(u)} data-testid={`delete-user-${u.id}`}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent data-testid="user-dialog">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit User" : "Tambah User"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Nama</Label>
-              <Input data-testid="user-form-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="user-dialog">
+          <DialogHeader><DialogTitle>{form?.id ? "Edit User" : "Tambah User"}</DialogTitle></DialogHeader>
+          {form && (
+            <div className="space-y-3">
+              <div><Label>Nama</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="user-name" /></div>
+              <div><Label>Email (Gmail untuk notifikasi)</Label><Input type="email" disabled={!!form.id} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} data-testid="user-email" /></div>
+              <div><Label>{form.id ? "Password baru (opsional)" : "Password"}</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="user-password" /></div>
+              <div>
+                <Label>Peran</Label>
+                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                  <SelectTrigger data-testid="user-role"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="user">Marketing</SelectItem><SelectItem value="super_admin">Super Admin</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Wilayah notifikasi</Label>
+                <p className="text-[11px] text-slate-400 mb-1">Kosongkan untuk mengikuti wilayah target global</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {wil.map((w) => (
+                    <label key={w.kode} className="flex items-center gap-2 text-xs text-slate-700">
+                      <Checkbox checked={form.regions.includes(w.kode)} onCheckedChange={() => toggleRegion(w.kode)} /> {titleCase(w.nama)}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <label className="flex items-center justify-between text-sm">Notifikasi Gmail <Switch checked={form.email_alert} onCheckedChange={(v) => setForm({ ...form, email_alert: v })} /></label>
+              {form.id && <label className="flex items-center justify-between text-sm">Akun aktif <Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} /></label>}
             </div>
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input
-                data-testid="user-form-email"
-                type="email"
-                value={form.email}
-                disabled={!!editing}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{editing ? "Password baru (opsional)" : "Password"}</Label>
-              <Input
-                data-testid="user-form-password"
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Peran</Label>
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                <SelectTrigger data-testid="user-form-role"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="user">Marketing (User)</SelectItem>
-                  <SelectItem value="super_admin">Super Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Batal</Button>
-            <Button onClick={submit} disabled={saving} className="bg-[#065F46] hover:bg-[#044E38]" data-testid="save-user-btn">
-              Simpan
-            </Button>
+            <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
+            <Button onClick={save} disabled={saving} className="bg-[#065F46] hover:bg-[#064E3B]" data-testid="user-save">Simpan</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

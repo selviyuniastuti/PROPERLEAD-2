@@ -1,135 +1,82 @@
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from "react-leaflet";
+import { useNavigate } from "react-router-dom";
+import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import api from "@/lib/api";
-import { ALERT_META, PRIORITY_META } from "@/lib/meta";
-import LeadDetailDialog from "@/components/LeadDetailDialog";
+import { toast } from "sonner";
+import api, { apiErr } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import AddToPlanButton from "@/components/AddToPlanButton";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { PRIORITY_META, DETEKSI_META, mapsHref, rupiahShort, titleCase } from "@/lib/meta";
 
-const ALERT_COLOR = {
-  rdtr_baru: "#10B981",
-  kkpr_terbit: "#3B82F6",
-  perubahan_status: "#F97316",
-};
-
-function parseCoord(s) {
-  if (!s) return null;
-  const parts = String(s).split(",").map((p) => parseFloat(p.trim()));
-  if (parts.length !== 2 || parts.some((n) => Number.isNaN(n))) return null;
-  return parts; // [lat, lng]
-}
+const ALL = "__all";
 
 export default function MapPage() {
-  const [leads, setLeads] = useState([]);
-  const [active, setActive] = useState(null);
-
-  const load = async () => {
-    const { data } = await api.get("/leads");
-    setLeads(data);
-  };
+  const [points, setPoints] = useState([]);
+  const [targetOnly, setTargetOnly] = useState(true);
+  const [prio, setPrio] = useState("");
+  const [deteksi, setDeteksi] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
-    load();
-  }, []);
+    api.get("/perumahan/map", { params: { target_only: targetOnly, prioritas: prio || undefined, deteksi: deteksi || undefined } })
+      .then(({ data }) => setPoints(data))
+      .catch((e) => toast.error(apiErr(e)));
+  }, [targetOnly, prio, deteksi]);
 
-  const points = leads
-    .map((l) => ({ lead: l, pos: parseCoord(l.proyek?.koordinat) }))
-    .filter((x) => x.pos);
-
-  const openLead = async (id) => {
-    const { data } = await api.get(`/leads/${id}`);
-    setActive(data);
-  };
-
-  const center = points.length ? points[0].pos : [-3.4, 114.8];
+  const color = (p) => (p.deteksi ? DETEKSI_META[p.deteksi].color : PRIORITY_META[p.prioritas]?.color || "#64748B");
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-          Peta Sebaran Proyek
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          {points.length} proyek berkoordinat · klik penanda untuk detail lead
-        </p>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4">
-        {Object.entries(ALERT_META).map(([k, v]) => (
-          <div key={k} className="flex items-center gap-2 text-sm text-slate-600">
-            <span className="h-3 w-3 rounded-full" style={{ background: ALERT_COLOR[k] }} />
-            {v.label}
-          </div>
+    <div className="fade-up" data-testid="map-page">
+      <PageHeader title="Peta Perumahan" subtitle={`${points.length.toLocaleString("id-ID")} titik perumahan dari koordinat Sikumbang`}>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <Switch checked={targetOnly} onCheckedChange={setTargetOnly} data-testid="map-target-toggle" /> Wilayah target
+        </label>
+        <Select value={prio || ALL} onValueChange={(v) => setPrio(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[150px] bg-white" data-testid="map-prio"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Semua prioritas</SelectItem>
+            {["A", "B", "C"].map((x) => <SelectItem key={x} value={x}>Prioritas {x}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={deteksi || ALL} onValueChange={(v) => setDeteksi(v === ALL ? "" : v)}>
+          <SelectTrigger className="w-[170px] bg-white" data-testid="map-deteksi"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL}>Semua status</SelectItem>
+            <SelectItem value="NEW_LISTING">Listing Baru</SelectItem>
+            <SelectItem value="DATA_UPDATED">Data Berubah</SelectItem>
+          </SelectContent>
+        </Select>
+      </PageHeader>
+      <div className="flex flex-wrap gap-4 mb-3 text-xs text-slate-600">
+        {[["#10B981", "Listing baru"], ["#F97316", "Data berubah"], ["#DC2626", "Prioritas A"], ["#D97706", "Prioritas B"], ["#64748B", "Prioritas C"]].map(([c, l]) => (
+          <span key={l} className="flex items-center gap-1.5"><span className="h-3 w-3 rounded-full" style={{ background: c }} />{l}</span>
         ))}
       </div>
-
-      <div
-        className="rounded-xl overflow-hidden border border-slate-200 shadow-sm"
-        data-testid="project-map"
-      >
-        <MapContainer
-          center={center}
-          zoom={9}
-          scrollWheelZoom
-          style={{ height: "560px", width: "100%" }}
-        >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          {points.map(({ lead, pos }) => {
-            const color = ALERT_COLOR[lead.alert_type] || "#3B82F6";
-            const prio = PRIORITY_META[lead.prioritas];
-            return (
-              <CircleMarker
-                key={lead.id}
-                center={pos}
-                radius={11}
-                pathOptions={{ color, fillColor: color, fillOpacity: 0.7, weight: 2 }}
-                data-testid={`map-marker-${lead.id}`}
-              >
-                <Tooltip>{lead.developer?.nama}</Tooltip>
-                <Popup>
-                  <div className="space-y-1" style={{ minWidth: 200 }}>
-                    <p className="font-bold text-slate-900">{lead.developer?.nama}</p>
-                    <p className="text-slate-600">{lead.proyek?.nama}</p>
-                    <p className="text-slate-500 text-xs">
-                      {lead.proyek?.kabupaten_kota} · {lead.proyek?.jenis}
-                    </p>
-                    <p className="text-xs">
-                      <span className={`px-1.5 py-0.5 rounded-full border ${prio?.badge}`}>
-                        {prio?.label} · {lead.score}
-                      </span>
-                    </p>
-                    <Button
-                      size="sm"
-                      onClick={() => openLead(lead.id)}
-                      className="bg-[#065F46] hover:bg-[#044E38] mt-1"
-                      data-testid={`map-detail-${lead.id}`}
-                    >
-                      Lihat Detail
-                    </Button>
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden h-[calc(100vh-260px)] min-h-[420px]">
+        <MapContainer center={[-3.35, 114.8]} zoom={9} preferCanvas className="h-full w-full">
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+          {points.map((p) => (
+            <CircleMarker key={p.id} center={[p.lat, p.lng]} radius={p.deteksi ? 8 : 5} pathOptions={{ color: "#fff", weight: 1, fillColor: color(p), fillOpacity: 0.85 }}>
+              <Popup>
+                <div className="space-y-1 min-w-[220px]">
+                  <p className="font-bold text-slate-900">{p.nama}</p>
+                  <p className="text-xs text-slate-500">{p.pengembang?.nama}</p>
+                  <p className="text-xs text-slate-500">{titleCase(p.wilayah?.kecamatan)}, {titleCase(p.wilayah?.kabupaten)}</p>
+                  <p className="text-xs">{p.jumlah_unit} unit · {rupiahShort(p.harga_min)} · Prioritas {p.prioritas} ({p.score})</p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <Button size="sm" variant="outline" onClick={() => navigate(`/perumahan/${encodeURIComponent(p.id)}`)}>Detail</Button>
+                    <a href={mapsHref(p)} target="_blank" rel="noreferrer"><Button size="sm" variant="outline">Maps</Button></a>
+                    <AddToPlanButton perumahanId={p.id} label="Rencana" />
                   </div>
-                </Popup>
-              </CircleMarker>
-            );
-          })}
+                </div>
+              </Popup>
+            </CircleMarker>
+          ))}
         </MapContainer>
       </div>
-
-      <LeadDetailDialog
-        lead={active}
-        open={!!active}
-        onOpenChange={(v) => !v && setActive(null)}
-        onChanged={async () => {
-          await load();
-          if (active) {
-            const { data } = await api.get(`/leads/${active.id}`);
-            setActive(data);
-          }
-        }}
-      />
     </div>
   );
 }
